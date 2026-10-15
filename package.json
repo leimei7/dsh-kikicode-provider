@@ -1,6 +1,6 @@
 {
   "name": "dsh-kikicode-provider",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "Kikicode（局域网 AI 中转站）供应商插件：装好后只需粘贴 API Key，自动同步模型目录与每个模型的思考档位，写入官方 llm-pi-ai 路由与凭据，无需改配置文件。",
   "type": "module",
   "main": "src/index.js",

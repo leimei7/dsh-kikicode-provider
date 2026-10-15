@@ -177,6 +177,9 @@ function catalogRows(body, limit = 300) {
       vision: entry.vision === true,
       available: entry.src_ok !== false,
       levels: efforts === false ? [] : Object.keys(efforts),
+      // 上下文窗口（中转站从上游元数据导入的；没有就是 0，面板不显示）
+      context: Number(entry.context_length ?? entry.context_window ?? 0) || 0,
+      maxOut: Number(entry.max_completion_tokens ?? entry.max_output_tokens ?? 0) || 0,
     })
     if (rows.length >= limit) break
   }

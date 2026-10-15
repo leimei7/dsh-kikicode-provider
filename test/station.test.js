@@ -76,6 +76,21 @@ test('reasoningEffortsOf：A 渠道（方舟只给 off/on）', () => {
   assert.deepEqual(efforts, { off: 'off', high: 'on' })
 })
 
+test('modelsFromCatalog：带上中转站导入的上下文窗口（否则客户端吃自家默认值）', () => {
+  const models = modelsFromCatalog({
+    data: [
+      { id: 'a', context_length: 1000000, max_completion_tokens: 65536 },
+      { id: 'b', context_window: 200000 },
+      { id: 'c' },
+    ],
+  })
+  assert.equal(models[0].contextWindow, 1000000)
+  assert.equal(models[0].maxTokens, 65536)
+  assert.equal(models[1].contextWindow, 200000)
+  assert.equal(Object.hasOwn(models[1], 'maxTokens'), false)
+  assert.equal(Object.hasOwn(models[2], 'contextWindow'), false, '没有元数据就别瞎猜窗口')
+})
+
 test('reasoningEffortsOf：C 渠道（四档）', () => {
   const efforts = reasoningEffortsOf({
     id: 'deepseek/deepseek-v4-flash(C)',

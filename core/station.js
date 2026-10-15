@@ -138,12 +138,20 @@ export function modelsFromCatalog(body, options = {}) {
   const includeUnavailable = options.includeUnavailable === true
   const build = (entry) => {
     const reasoningEfforts = reasoningEffortsOf(entry)
-    return {
+    const model = {
       id: entry.id.trim(),
       name: entry.id.trim(),
       input: entry.vision === true ? ['text', 'image'] : ['text'],
       reasoningEfforts,
     }
+    // 上下文窗口：中转站从上游元数据导入过就用真的（OpenRouter 风格的
+    // context_length / max_completion_tokens）。不带的话客户端吃自家默认值 ——
+    // dsh 默认 256K，会把 20 万窗口的模型当 25.6 万用，长上下文请求就被上游拒。
+    const context = Number(entry.context_length ?? entry.context_window ?? 0)
+    const maxOut = Number(entry.max_completion_tokens ?? entry.max_output_tokens ?? 0)
+    if (Number.isFinite(context) && context > 0) model.contextWindow = Math.floor(context)
+    if (Number.isFinite(maxOut) && maxOut > 0) model.maxTokens = Math.floor(maxOut)
+    return model
   }
   const seen = new Set()
   const available = []

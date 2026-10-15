@@ -181,10 +181,16 @@ test('插件身份常量稳定（改了这个，老用户已写入的路由就�
 test('src/client.js 能被浏览器解析（带点键名忘加引号会在这里炸）', () => {
   const source = fs.readFileSync(new URL('../src/client.js', import.meta.url), 'utf8')
   assert.doesNotThrow(() => new vm.Script(source, { filename: 'src/client.js' }))
-  // 注册协议与挂载点：id 必须等于包名，slot 必须挂在官方模型页页脚
+  // 注册协议与挂载点：id 必须等于包名，作为独立的「设置 → Kikicode」一节出现
   assert.match(source, /__ModuleLoader__\.load\(\{/)
   assert.match(source, /id: 'dsh-kikicode-provider'/)
-  assert.match(source, /settings\.models\.footer/)
+  assert.match(source, /'settings\.section'/)
+  assert.match(source, /id: 'kikicode'/)
+  assert.doesNotMatch(source, /settings\.models\.footer/, '不应再挂在模型页脚（用户要求独立一节）')
+  // 进度条的填充必须是块级：写成 <span> 又不给 display:block 的话，宽高全失效，
+  // 用户看到的就是一条没有颜色的灰轨道（实测踩过）。
+  assert.match(source, /\.kk-barFill\{display:block/, '进度条填充要 display:block，否则 width/height 对行内元素无效')
+  assert.match(source, /h\('span', \{ className: pct >= 90 \? 'kk-barFill kk-barFillHot' : 'kk-barFill'/)
   assert.match(source, /exports\.inject = \['slots', 'locale'\]/)
 })
 

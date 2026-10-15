@@ -1,12 +1,18 @@
 // dsh-kikicode-provider - browser half.
 //
-// 官方「设置 → 模型」页脚上挂一张 Kikicode 卡片（slot: settings.models.footer）：
-// 填地址 + 粘贴 API Key → 启用，插件自己去中转站拉模型目录（含每个模型的思考档位）、
-// 写官方 llm-pi-ai 路由与凭据，并显示余额/积分/套餐/今日用量。
+// 设置左侧独立的「Kikicode」一节（slot: settings.section，id kikicode，紧挨官方
+// 「模型」），像 Command Code 那样一个完整页面，分三块：
 //
-// 这是一个 classic client bundle（client-modules 协议）：注册到
-// window.__ModuleLoader__ 并导出 apply()，不需要构建步骤，除 react 与官方
-// primitives 外不依赖任何东西。所有写入都走后端的回环路由，这里只负责画和 fetch。
+//   连接 —— 中转站地址 + API Key + 检测/启用/移除 + 状态徽标
+//   用量 —— 余额 / 积分 / 今日请求与花费 / 套餐三窗口进度条（5 小时 · 今日 · 本月）
+//   模型 —— 目录摘要 + 同步模型 + 可装模型的明细表（厂商 / 价格 / 档位 / 图片）
+//
+// classic client bundle（client-modules 协议）：注册到 window.__ModuleLoader__ 并导出
+// apply()，不需要构建步骤。所有写入走后端的回环路由，这里只负责画和 fetch。
+//
+// ⚠️ 教训：对象字面量里 'station.balance': 这类带点键名必须加引号 —— 裸写是语法
+// 错误，宿主半照常工作，只有浏览器报 "import failed"，卡片整个不出现。单测里的
+// vm.Script 编译守卫就是为它加的。
 
 window.__ModuleLoader__.load({
   id: 'dsh-kikicode-provider',
@@ -32,8 +38,12 @@ window.__ModuleLoader__.load({
     // --- 文案 -----------------------------------------------------------------
 
     const zh = {
+      nav: 'Kikicode',
       title: 'Kikicode 中转站',
-      hint: '局域网中转站：填地址、粘贴 API Key，插件自动同步模型目录与每个模型的思考档位。写入官方 llm-pi-ai 设置与凭据服务，立即生效、无需重启。',
+      hint: '局域网 OpenAI 兼容中转站：填地址、粘贴 API Key，插件自动同步模型目录与每个模型的思考档位。写入官方 llm-pi-ai 设置与凭据服务，立即生效、无需重启。',
+      'group.connection': '连接',
+      'group.usage': '用量',
+      'group.models': '模型',
       refresh: '刷新',
       loading: '读取中…',
       baseURL: '中转站地址',
@@ -41,31 +51,37 @@ window.__ModuleLoader__.load({
       apiKey: 'API Key',
       apiKeyPlaceholder: '粘贴中转站里创建的 Key（sk-…）',
       apiKeyKeep: '留空 = 继续用已保存的 Key',
+      'key.saved': '凭据里已有 Key',
       'action.probe': '检测',
       'action.enable': '启用',
       'action.refreshModels': '同步模型',
+      'action.refreshUsage': '刷新用量',
       'action.remove': '移除',
       'action.showModels': '看看会装进哪些模型',
       'action.hideModels': '收起模型列表',
-      'action.rekey': '换 Key',
+      'action.rekey': '换 Key / 改地址',
       'status.live': '运行中',
       'status.stored': '已写入',
       'status.noKey': '缺 Key',
-      'status.configured': '已配置',
-      'station.title': '中转站状态',
-      'station.site': '站点',
-      'station.user': '账号',
-      'station.key': 'Key',
-      'station.balance': '余额',
-      'station.points': '积分',
-      'station.plan': '套餐',
-      'station.planNone': '未开通套餐',
-      'station.planLeft': '{name} · 剩 {days} 天 · 本月已用 {used}/{limit}',
-      'station.today': '今日',
-      'station.todayValue': '{req} 次请求 · 余额 ¥{spend} · 套餐额度 {plan}',
-      'station.models': '模型',
-      'station.modelsValue': '{total} 个可用 · {reasoning} 个可选档位 · {vision} 个支持图片',
-      'station.unreachable': '读不到用量：{error}',
+      'status.unconfigured': '未配置',
+      'conn.baseURL': '地址',
+      'conn.key': 'Key',
+      'conn.keyLastUsed': '上次使用',
+      'conn.never': '从未',
+      'usage.balance': '余额',
+      'usage.points': '积分',
+      'usage.today': '今日',
+      'usage.todayValue': '{req} 次请求 · 余额付 ¥{spend} · 套餐额度 {plan}',
+      'usage.holds': '在途预扣',
+      'usage.plan': '套餐',
+      'usage.planNone': '未开通套餐，按余额计费',
+      'usage.planLeft': '{name} · 剩 {days} 天{exhausted}',
+      'usage.exhausted': ' · 月额度已用完',
+      'usage.window5h': '5 小时窗口',
+      'usage.windowDay': '今日窗口',
+      'usage.windowMonth': '本月额度',
+      'usage.unreachable': '读不到用量：{error}',
+      'models.summary': '{total} 个可用 · {reasoning} 个可选档位 · {vision} 个支持图片',
       'probe.title': '检测结果',
       'probe.value': '{total} 个模型可用（站内共 {advertised} 个，{unavailable} 个渠道已停用）· {reasoning} 个能选思考档位',
       'probe.levels': '出现的档位：{levels}',
@@ -76,17 +92,20 @@ window.__ModuleLoader__.load({
       'models.vision': '图片',
       'models.unavailable': '渠道停用',
       'models.none': '站内没有可用模型',
-      'notice.enabled': '已启用 Kikicode（{models} 个模型）',
+      'notice.enabled': '已启用 Kikicode（{models} 个模型），去模型选择器就能看到',
       'notice.refreshed': '已同步模型目录（{models} 个）',
       'notice.removed': '已移除 Kikicode 路由',
-      'remove.confirm': '移除 Kikicode？已保存的 API Key 会保留（想连 Key 一起删就再点一次删除 Key）。',
+      'remove.confirm': '移除 Kikicode？已保存的 API Key 会保留（想连 Key 一起删就再点一次确认）。',
       'removeKey.confirm': '连 API Key 一起删掉？',
       'error.keyRequired': '请先填写 API Key',
-      'key.saved': '凭据里已有 Key',
     }
     const en = {
+      nav: 'Kikicode',
       title: 'Kikicode relay',
-      hint: 'A LAN relay: enter the address, paste the API key; the plugin syncs the model catalog and each model’s reasoning levels. Writes the official llm-pi-ai settings and credentials service — effective immediately, no restart.',
+      hint: 'A LAN OpenAI-compatible relay: enter the address, paste the API key; the plugin syncs the model catalog and each model’s reasoning levels. Writes the official llm-pi-ai settings and credentials service — effective immediately, no restart.',
+      'group.connection': 'Connection',
+      'group.usage': 'Usage',
+      'group.models': 'Models',
       refresh: 'Refresh',
       loading: 'Loading…',
       baseURL: 'Relay base URL',
@@ -94,31 +113,37 @@ window.__ModuleLoader__.load({
       apiKey: 'API key',
       apiKeyPlaceholder: 'Paste a key created on the relay (sk-…)',
       apiKeyKeep: 'Leave empty to keep the stored key',
+      'key.saved': 'a key is already stored',
       'action.probe': 'Test',
       'action.enable': 'Enable',
       'action.refreshModels': 'Sync models',
+      'action.refreshUsage': 'Refresh usage',
       'action.remove': 'Remove',
       'action.showModels': 'Preview the models to be added',
       'action.hideModels': 'Hide the model list',
-      'action.rekey': 'Replace key',
+      'action.rekey': 'Replace key / address',
       'status.live': 'live',
       'status.stored': 'written',
       'status.noKey': 'no key',
-      'status.configured': 'configured',
-      'station.title': 'Relay status',
-      'station.site': 'Site',
-      'station.user': 'Account',
-      'station.key': 'Key',
-      'station.balance': 'Balance',
-      'station.points': 'Points',
-      'station.plan': 'Plan',
-      'station.planNone': 'no plan',
-      'station.planLeft': '{name} · {days} days left · used {used}/{limit} this month',
-      'station.today': 'Today',
-      'station.todayValue': '{req} requests · balance ¥{spend} · plan quota {plan}',
-      'station.models': 'Models',
-      'station.modelsValue': '{total} usable · {reasoning} with levels · {vision} with images',
-      'station.unreachable': 'Usage unavailable: {error}',
+      'status.unconfigured': 'not configured',
+      'conn.baseURL': 'Address',
+      'conn.key': 'Key',
+      'conn.keyLastUsed': 'Last used',
+      'conn.never': 'never',
+      'usage.balance': 'Balance',
+      'usage.points': 'Points',
+      'usage.today': 'Today',
+      'usage.todayValue': '{req} requests · ¥{spend} from balance · {plan} from plan quota',
+      'usage.holds': 'In-flight holds',
+      'usage.plan': 'Plan',
+      'usage.planNone': 'No plan — billed from balance',
+      'usage.planLeft': '{name} · {days} days left{exhausted}',
+      'usage.exhausted': ' · monthly quota exhausted',
+      'usage.window5h': '5-hour window',
+      'usage.windowDay': 'Daily window',
+      'usage.windowMonth': 'Monthly quota',
+      'usage.unreachable': 'Usage unavailable: {error}',
+      'models.summary': '{total} usable · {reasoning} with levels · {vision} with images',
       'probe.title': 'Probe result',
       'probe.value': '{total} usable models (relay advertises {advertised}, {unavailable} on disabled channels) · {reasoning} expose reasoning levels',
       'probe.levels': 'Levels seen: {levels}',
@@ -129,17 +154,68 @@ window.__ModuleLoader__.load({
       'models.vision': 'Image',
       'models.unavailable': 'channel off',
       'models.none': 'No usable model on the relay',
-      'notice.enabled': 'Kikicode enabled ({models} models)',
+      'notice.enabled': 'Kikicode enabled ({models} models) — see them in the model picker',
       'notice.refreshed': 'Model catalog synced ({models})',
       'notice.removed': 'Kikicode route removed',
       'remove.confirm': 'Remove Kikicode? The stored API key stays (confirm twice to delete the key too).',
       'removeKey.confirm': 'Delete the stored API key as well?',
       'error.keyRequired': 'Enter an API key first',
-      'key.saved': 'a key is already stored',
     }
 
     const format = (template, vars) =>
       String(template).replace(/\{(\w+)\}/g, (_, key) => (vars && vars[key] !== undefined ? String(vars[key]) : ''))
+
+    // --- 样式（注入一次，class 前缀 kk-）--------------------------------------
+
+    const CSS = `
+.kk-page{max-width:760px;display:flex;flex-direction:column;gap:14px}
+.kk-h1{font-size:16px;font-weight:600;margin:0}
+.kk-hint{opacity:.7;line-height:1.55;margin:0;font-size:13px}
+.kk-h2{font-size:13px;font-weight:600;margin:2px 0 8px;opacity:.85}
+.kk-card{border:1px solid var(--dsw-alias-border-l2,#e5e7eb);border-radius:12px;padding:14px 16px;font-size:13px}
+.kk-row{display:flex;align-items:baseline;gap:8px;padding:3px 0;line-height:1.6}
+.kk-rowTop{align-items:center}
+.kk-label{opacity:.6;min-width:88px;flex:none}
+.kk-value{flex:1;min-width:0;overflow-wrap:anywhere}
+.kk-badge{font-size:11px;padding:2px 8px;border-radius:999px;border:1px solid var(--dsw-alias-border-l2,#d7dbe0);opacity:.9;flex:none}
+.kk-badgeLive{color:var(--dsw-alias-state-success-primary,#1d9a4a);border-color:var(--dsw-alias-state-success-primary,#1d9a4a)}
+.kk-badgeWarn{color:var(--dsw-alias-state-warning-primary,#b8860b)}
+.kk-field{display:flex;flex-direction:column;gap:4px;margin:8px 0}
+.kk-input{width:100%;padding:7px 9px;border-radius:8px;border:1px solid var(--dsw-alias-border-l2,#d7dbe0);background:transparent;color:inherit;font-size:13px;box-sizing:border-box}
+.kk-btn{padding:6px 14px;border-radius:8px;border:1px solid var(--dsw-alias-border-l2,#d7dbe0);background:transparent;color:inherit;cursor:pointer;font-size:13px}
+.kk-btnPrimary{padding:6px 16px;border-radius:8px;border:1px solid transparent;background:var(--dsw-alias-interactive-bg-hover,#2f6fec);color:#fff;cursor:pointer;font-size:13px;font-weight:600}
+.kk-btnDanger{padding:5px 10px;border-radius:8px;border:1px solid var(--dsw-alias-border-l2,#d7dbe0);background:transparent;color:var(--dsw-alias-state-error-primary,#c0392b);cursor:pointer;font-size:12px}
+.kk-linkBtn{background:none;border:none;color:var(--dsw-alias-link,#2f6fec);cursor:pointer;font-size:12px;padding:0}
+.kk-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+.kk-error{color:var(--dsw-alias-state-error-primary,#c0392b);margin:4px 0}
+.kk-notice{color:var(--dsw-alias-state-success-primary,#1d9a4a);margin:4px 0}
+.kk-sub{opacity:.6;font-size:12px}
+.kk-bar{display:block;height:8px;border-radius:999px;background:var(--dsw-alias-bg-layer-1,#e9ecf1);overflow:hidden;flex:1}
+.kk-barFill{display:block;height:100%;width:0;border-radius:999px;background:var(--dsw-alias-brand-primary,#2f6fec);transition:width .3s ease}
+.kk-barFillHot{background:var(--dsw-alias-state-warning-primary,#e67e22)}
+.kk-window{display:flex;align-items:center;gap:10px;padding:2px 0;font-size:12px}
+.kk-windowLabel{opacity:.65;width:88px;flex:none}
+.kk-windowValue{opacity:.75;width:150px;flex:none;text-align:right}
+.kk-chip{font-size:11px;padding:1px 6px;border-radius:6px;border:1px solid var(--dsw-alias-border-l3,#e2e5ea);opacity:.85;margin-right:4px;display:inline-block}
+.kk-table{margin-top:8px;max-height:280px;overflow:auto;border:1px solid var(--dsw-alias-border-l3,#eef0f3);border-radius:10px}
+.kk-table table{width:100%;border-collapse:collapse}
+.kk-th{position:sticky;top:0;background:var(--dsw-alias-bg-layer-1,transparent);text-align:left;padding:6px 10px;font-size:12px;opacity:.7;border-bottom:1px solid var(--dsw-alias-border-l3,#eef0f3)}
+.kk-td{padding:5px 10px;font-size:12px;border-bottom:1px solid var(--dsw-alias-border-l3,#f5f6f8)}
+.kk-mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+.kk-price{white-space:nowrap}
+@media (prefers-reduced-motion:reduce){.kk-barFill{transition:none}}
+`
+
+    function injectCss(id, css) {
+      if (typeof document === 'undefined') return () => {}
+      if (document.querySelector(`style[data-plugin-css="${id}"]`) !== null) return () => {}
+      const tag = document.createElement('style')
+      tag.dataset.plugin = 'dsh-kikicode-provider'
+      tag.dataset.pluginCss = id
+      tag.textContent = css
+      document.head.appendChild(tag)
+      return () => tag.remove()
+    }
 
     // --- 后端调用 -------------------------------------------------------------
 
@@ -160,41 +236,12 @@ window.__ModuleLoader__.load({
       return payload
     }
 
-    // --- 样式 -----------------------------------------------------------------
-
-    const S = {
-      card: { border: '1px solid var(--dsw-alias-border-l2, #e5e7eb)', borderRadius: 12, padding: '14px 16px', marginTop: 16, fontSize: 13 },
-      header: { display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 },
-      title: { fontWeight: 600, fontSize: 14 },
-      hint: { opacity: 0.7, lineHeight: 1.5, marginBottom: 10 },
-      rowLabel: { opacity: 0.6, minWidth: 62, display: 'inline-block' },
-      field: { display: 'flex', flexDirection: 'column', gap: 4, marginBottom: 8 },
-      label: { opacity: 0.75 },
-      input: { width: '100%', padding: '7px 9px', borderRadius: 8, border: '1px solid var(--dsw-alias-border-l2, #d7dbe0)', background: 'transparent', color: 'inherit', fontSize: 13, boxSizing: 'border-box' },
-      button: { padding: '7px 14px', borderRadius: 8, border: '1px solid var(--dsw-alias-border-l2, #d7dbe0)', background: 'transparent', color: 'inherit', cursor: 'pointer', fontSize: 13 },
-      primary: { padding: '7px 16px', borderRadius: 8, border: '1px solid transparent', background: 'var(--dsw-alias-interactive-bg-hover, #2f6fec)', color: '#fff', cursor: 'pointer', fontSize: 13, fontWeight: 600 },
-      danger: { padding: '5px 10px', borderRadius: 8, border: '1px solid var(--dsw-alias-border-l2, #d7dbe0)', background: 'transparent', color: 'var(--dsw-alias-state-error-primary, #c0392b)', cursor: 'pointer', fontSize: 12 },
-      linkButton: { background: 'none', border: 'none', color: 'var(--dsw-alias-link, #2f6fec)', cursor: 'pointer', fontSize: 12, padding: 0 },
-      badge: { fontSize: 11, padding: '2px 7px', borderRadius: 999, border: '1px solid var(--dsw-alias-border-l2, #d7dbe0)', opacity: 0.85 },
-      chip: { fontSize: 11, padding: '1px 6px', borderRadius: 6, border: '1px solid var(--dsw-alias-border-l3, #e2e5ea)', opacity: 0.8, marginRight: 4 },
-      grow: { flex: 1 },
-      error: { color: 'var(--dsw-alias-state-error-primary, #c0392b)', margin: '6px 0' },
-      notice: { color: 'var(--dsw-alias-state-success-primary, #1d9a4a)', margin: '6px 0' },
-      panel: { border: '1px solid var(--dsw-alias-border-l3, #eef0f3)', borderRadius: 10, padding: '10px 12px', marginTop: 8, lineHeight: 1.7 },
-      table: { marginTop: 8, maxHeight: 260, overflow: 'auto', border: '1px solid var(--dsw-alias-border-l3, #eef0f3)', borderRadius: 10 },
-      th: { position: 'sticky', top: 0, background: 'var(--dsw-alias-bg-l1, transparent)', textAlign: 'left', padding: '6px 10px', fontSize: 12, opacity: 0.7, borderBottom: '1px solid var(--dsw-alias-border-l3, #eef0f3)' },
-      td: { padding: '5px 10px', fontSize: 12, borderBottom: '1px solid var(--dsw-alias-border-l3, #f5f6f8)' },
-      mono: { fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace' },
-      sub: { opacity: 0.6, fontSize: 12 },
-      actions: { display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 10 },
-    }
-
     const money = (value) => `¥${Number(value || 0).toFixed(2)}`
     const priceText = (price) => (price ? `${price.input} / ${price.output}${price.hit !== null && price.hit !== undefined ? `（命中 ${price.hit}）` : ''}` : '-')
 
-    // --- 卡片 -----------------------------------------------------------------
+    // --- 页面 -----------------------------------------------------------------
 
-    function KikicodeCard({ t }) {
+    function KikicodeSection({ t }) {
       const tr = (key, vars) => format(t(key), vars)
       const [state, setState] = react.useState(null)
       const [error, setError] = react.useState(null)
@@ -255,6 +302,7 @@ window.__ModuleLoader__.load({
           setProbe(null)
           setRows(null)
           setShowModels(false)
+          setRekey(false)
           setNotice(tr('notice.enabled', { models: result.models }))
           await load()
         })
@@ -281,43 +329,144 @@ window.__ModuleLoader__.load({
 
       const configured = state ? state.configured === true : false
       const info = state ? state.station : null
-      const usage = state ? state.usage : null
-      const me = usage && usage.ok !== false ? usage : null
+      const me = state && state.usage && state.usage.ok !== false ? state.usage : null
+      const plan = me && me.plan && me.plan.active === true ? me.plan : null
 
-      const statusBadges = () => {
+      const statusBadge = () => {
         if (!state) return null
         const parts = []
+        if (!configured) parts.push(tr('status.unconfigured'))
+        else parts.push(state.live ? tr('status.live') : tr('status.stored'))
+        if (configured && !state.keyConfigured) parts.push(tr('status.noKey'))
+        const cls = !configured ? 'kk-badge' : state.live && state.keyConfigured ? 'kk-badge kk-badgeLive' : 'kk-badge kk-badgeWarn'
+        return h('span', { className: cls }, parts.join(' · '))
+      }
+
+      const windowBar = (label, used, limit) => {
+        const usedN = Number(used || 0)
+        const limitN = Number(limit || 0)
+        const pct = limitN > 0 ? Math.min(100, Math.round((usedN / limitN) * 100)) : 0
+        return h('div', { className: 'kk-window', key: label },
+          h('span', { className: 'kk-windowLabel' }, label),
+          h('span', { className: 'kk-bar' },
+            h('span', { className: pct >= 90 ? 'kk-barFill kk-barFillHot' : 'kk-barFill', style: { width: `${pct}%` } })),
+          h('span', { className: 'kk-windowValue' }, `${money(usedN)} / ${money(limitN)} · ${pct}%`),
+        )
+      }
+
+      const connectionCard = () =>
+        h('div', { className: 'kk-card' },
+          h('div', { className: 'kk-h2' }, tr('group.connection')),
+          h('div', { className: 'kk-row kk-rowTop' },
+            statusBadge(),
+            h('span', { className: 'kk-sub' }, info ? tr('models.summary', { total: info.modelCount, reasoning: info.reasoningCount, vision: info.visionCount }) : null),
+          ),
+          configured && !rekey
+            ? h('div', null,
+                h('div', { className: 'kk-row' }, h('span', { className: 'kk-label' }, tr('conn.baseURL')), h('span', { className: 'kk-value kk-mono' }, info ? info.baseURL : '')),
+                h('div', { className: 'kk-row' }, h('span', { className: 'kk-label' }, tr('conn.key')), h('span', { className: 'kk-value' },
+                  state && state.keyConfigured ? tr('key.saved') : tr('status.noKey'),
+                  me && me.key ? ` · ${me.key.name}` : '',
+                )),
+                h('div', { className: 'kk-row' }, h('span', { className: 'kk-label' }, tr('conn.keyLastUsed')), h('span', { className: 'kk-value' },
+                  me && me.key && me.key.last_used ? new Date(me.key.last_used).toLocaleString() : tr('conn.never'),
+                )),
+              )
+            : h('div', null,
+                h('label', { className: 'kk-field' },
+                  h('span', { className: 'kk-sub' }, tr('baseURL')),
+                  h('input', {
+                    className: 'kk-input',
+                    value: baseURL,
+                    placeholder: state ? state.defaultBaseURL : 'http://192.168.1.101:3100/v1',
+                    onChange: (event) => setBaseURL(event.target.value),
+                  }),
+                  h('span', { className: 'kk-sub' }, tr('baseURLHint')),
+                ),
+                h('label', { className: 'kk-field' },
+                  h('span', { className: 'kk-sub' }, tr('apiKey'), configured && state && state.keyConfigured ? ` · ${tr('key.saved')}` : ''),
+                  h('input', {
+                    className: 'kk-input',
+                    type: 'password',
+                    autoComplete: 'off',
+                    value: apiKey,
+                    placeholder: configured ? tr('apiKeyKeep') : tr('apiKeyPlaceholder'),
+                    onChange: (event) => setApiKey(event.target.value),
+                  }),
+                ),
+              ),
+          h('div', { className: 'kk-actions' },
+            configured && !rekey
+              ? h('button', { type: 'button', className: 'kk-btn', disabled: busy !== null, onClick: doRefresh }, busy === '__refresh' ? tr('loading') : tr('action.refreshModels'))
+              : h('button', { type: 'button', className: 'kk-btn', disabled: busy !== null, onClick: doProbe }, busy === '__probe' ? tr('loading') : tr('action.probe')),
+            configured && !rekey
+              ? h('button', { type: 'button', className: 'kk-btn', disabled: busy !== null, onClick: () => setRekey(true) }, tr('action.rekey'))
+              : h('button', { type: 'button', className: 'kk-btnPrimary', disabled: busy !== null, onClick: doEnable }, busy === '__enable' ? tr('loading') : tr('action.enable')),
+            configured
+              ? h('button', { type: 'button', className: 'kk-btnDanger', disabled: busy !== null, onClick: doRemove }, tr('action.remove'))
+              : null,
+          ),
+        )
+
+      const usageCard = () => {
         if (!configured) return null
-        parts.push(state.live ? tr('status.live') : tr('status.stored'))
-        if (!state.keyConfigured) parts.push(tr('status.noKey'))
-        return h('span', { style: S.badge }, parts.join(' · '))
+        if (state && state.usageError) {
+          return h('div', { className: 'kk-card' },
+            h('div', { className: 'kk-h2' }, tr('group.usage')),
+            h('div', { className: 'kk-sub' }, tr('usage.unreachable', { error: state.usageError })))
+        }
+        if (!me) return null
+        return h('div', { className: 'kk-card' },
+          h('div', { className: 'kk-row kk-rowTop' },
+            h('div', { className: 'kk-h2', style: { margin: 0, flex: 1 } }, tr('group.usage')),
+            h('button', { type: 'button', className: 'kk-btn', disabled: busy !== null, onClick: load }, busy === '__load' ? tr('loading') : tr('action.refreshUsage')),
+          ),
+          h('div', { className: 'kk-row' }, h('span', { className: 'kk-label' }, tr('usage.balance')), h('span', { className: 'kk-value' }, money(me.balance))),
+          h('div', { className: 'kk-row' }, h('span', { className: 'kk-label' }, tr('usage.points')), h('span', { className: 'kk-value' }, String(me.points ?? 0))),
+          h('div', { className: 'kk-row' }, h('span', { className: 'kk-label' }, tr('usage.today')), h('span', { className: 'kk-value' },
+            tr('usage.todayValue', { req: me.req_today ?? 0, spend: Number(me.spend_today || 0).toFixed(4), plan: Number(me.plan_today || 0).toFixed(2) }))),
+          Number(me.holds) > 0
+            ? h('div', { className: 'kk-row' }, h('span', { className: 'kk-label' }, tr('usage.holds')), h('span', { className: 'kk-value' }, money(me.holds)))
+            : null,
+          plan
+            ? h('div', { className: 'kk-row' }, h('span', { className: 'kk-label' }, tr('usage.plan')), h('span', { className: 'kk-value' },
+                tr('usage.planLeft', { name: plan.name || plan.tier, days: plan.left_days, exhausted: plan.exhausted ? tr('usage.exhausted') : '' })))
+            : h('div', { className: 'kk-row' }, h('span', { className: 'kk-label' }, tr('usage.plan')), h('span', { className: 'kk-value kk-sub' }, tr('usage.planNone'))),
+          plan && plan.limits
+            ? h('div', { style: { marginTop: 6 } },
+                windowBar(tr('usage.window5h'), plan.used && plan.used.w5, plan.limits.w5),
+                windowBar(tr('usage.windowDay'), plan.used && plan.used.day, plan.limits.day),
+                windowBar(tr('usage.windowMonth'), plan.used && plan.used.month, plan.limits.month),
+              )
+            : null,
+        )
       }
 
       const renderModels = () => {
-        const list = rows || (probe && probe.models) || null
-        if (!showModels || !list) return null
-        if (list.length === 0) return h('div', { style: S.sub }, tr('models.none'))
-        return h('div', { style: S.table },
-          h('table', { style: { width: '100%', borderCollapse: 'collapse' } },
+        if (!showModels) return null
+        const list = rows || (probe && probe.models) || []
+        if (list.length === 0) return h('div', { className: 'kk-sub' }, tr('models.none'))
+        return h('div', { className: 'kk-table' },
+          h('table', null,
             h('thead', null,
               h('tr', null,
-                h('th', { style: S.th }, tr('models.id')),
-                h('th', { style: S.th }, tr('models.vendor')),
-                h('th', { style: S.th }, tr('models.price')),
-                h('th', { style: S.th }, tr('models.levels')),
+                h('th', { className: 'kk-th' }, tr('models.id')),
+                h('th', { className: 'kk-th' }, tr('models.vendor')),
+                h('th', { className: 'kk-th' }, tr('models.price')),
+                h('th', { className: 'kk-th' }, tr('models.levels')),
               ),
             ),
             h('tbody', null,
               list.map((row) =>
                 h('tr', { key: row.id, style: row.available === false ? { opacity: 0.45 } : undefined },
-                  h('td', { style: { ...S.td, ...S.mono } }, row.id, row.available === false ? ` · ${tr('models.unavailable')}` : ''),
-                  h('td', { style: S.td }, row.vendor || '-'),
-                  h('td', { style: S.td }, priceText(row.price)),
-                  h('td', { style: S.td },
+                  h('td', { className: 'kk-td kk-mono' }, row.id, row.available === false ? ` · ${tr('models.unavailable')}` : ''),
+                  h('td', { className: 'kk-td' }, row.vendor || '-'),
+                  h('td', { className: 'kk-td kk-price' }, priceText(row.price)),
+                  h('td', { className: 'kk-td' },
                     row.levels && row.levels.length > 0
-                      ? row.levels.map((level) => h('span', { key: level, style: S.chip }, level))
-                      : h('span', { style: S.sub }, '-'),
-                    row.vision ? h('span', { style: S.chip }, tr('models.vision')) : null,
+                      ? row.levels.map((level) => h('span', { key: level, className: 'kk-chip' }, level))
+                      : h('span', { className: 'kk-sub' }, '-'),
+                    row.vision ? h('span', { className: 'kk-chip' }, tr('models.vision')) : null,
                   ),
                 ),
               ),
@@ -326,77 +475,11 @@ window.__ModuleLoader__.load({
         )
       }
 
-      const renderUsage = () => {
-        if (!configured) return null
-        if (state && state.usageError) return h('div', { style: S.sub }, tr('station.unreachable', { error: state.usageError }))
-        if (!me) return null
-        const plan = me.plan && me.plan.active === true ? me.plan : null
-        return h('div', { style: S.panel },
-          h('div', null, h('span', { style: S.rowLabel }, tr('station.site')), me.site || '-', '  ·  ', h('span', { style: S.rowLabel }, tr('station.user')), me.username || '-'),
-          h('div', null,
-            h('span', { style: S.rowLabel }, tr('station.balance')), money(me.balance), '  ·  ',
-            h('span', { style: S.rowLabel }, tr('station.points')), String(me.points ?? 0), '  ·  ',
-            h('span', { style: S.rowLabel }, tr('station.key')), (me.key && me.key.name) || '-',
-          ),
-          h('div', null,
-            h('span', { style: S.rowLabel }, tr('station.plan')),
-            plan
-              ? tr('station.planLeft', { name: plan.name || plan.tier, days: plan.left_days, used: plan.used ? plan.used.month : 0, limit: plan.limits ? plan.limits.month : 0 })
-              : tr('station.planNone'),
-          ),
-          h('div', null,
-            h('span', { style: S.rowLabel }, tr('station.today')),
-            tr('station.todayValue', { req: me.req_today ?? 0, spend: Number(me.spend_today || 0).toFixed(4), plan: Number(me.plan_today || 0).toFixed(2) }),
-          ),
-          info
-            ? h('div', null,
-                h('span', { style: S.rowLabel }, tr('station.models')),
-                tr('station.modelsValue', { total: info.modelCount, reasoning: info.reasoningCount, vision: info.visionCount }),
-              )
-            : null,
-        )
-      }
-
-      const renderForm = () =>
-        h('div', null,
-          h('label', { style: S.field },
-            h('span', { style: S.label }, tr('baseURL')),
-            h('input', {
-              style: S.input,
-              value: baseURL,
-              placeholder: state ? state.defaultBaseURL : 'http://192.168.1.101:3100/v1',
-              onChange: (event) => setBaseURL(event.target.value),
-            }),
-            h('span', { style: S.sub }, tr('baseURLHint')),
-          ),
-          h('label', { style: S.field },
-            h('span', { style: S.label },
-              tr('apiKey'),
-              configured && state && state.keyConfigured ? ` · ${tr('key.saved')}` : '',
-            ),
-            h('input', {
-              style: S.input,
-              type: 'password',
-              autoComplete: 'off',
-              value: apiKey,
-              placeholder: configured ? tr('apiKeyKeep') : tr('apiKeyPlaceholder'),
-              onChange: (event) => setApiKey(event.target.value),
-            }),
-          ),
-          h('div', { style: S.actions },
-            h('button', { type: 'button', style: S.button, disabled: busy !== null, onClick: doProbe }, busy === '__probe' ? tr('loading') : tr('action.probe')),
-            h('button', { type: 'button', style: S.primary, disabled: busy !== null, onClick: doEnable }, busy === '__enable' ? tr('loading') : configured ? tr('action.refreshModels') : tr('action.enable')),
-            configured
-              ? h('button', { type: 'button', style: S.danger, disabled: busy !== null, onClick: doRemove }, busy === '__remove' ? tr('loading') : tr('action.remove'))
-              : null,
-          ),
-        )
-
-      const renderProbe = () => {
+      const probeCard = () => {
         if (!probe) return null
         const summary = probe.summary || {}
-        return h('div', { style: S.panel },
-          h('b', null, tr('probe.title')),
+        return h('div', { className: 'kk-card' },
+          h('div', { className: 'kk-h2' }, tr('probe.title')),
           h('div', null, tr('probe.value', {
             total: summary.total ?? 0,
             advertised: summary.advertised ?? 0,
@@ -404,39 +487,36 @@ window.__ModuleLoader__.load({
             reasoning: summary.reasoning ?? 0,
           })),
           summary.levels && summary.levels.length > 0
-            ? h('div', null, tr('probe.levels', { levels: summary.levels.join(' / ') }))
+            ? h('div', { className: 'kk-sub' }, tr('probe.levels', { levels: summary.levels.join(' / ') }))
             : null,
         )
       }
 
-      return h('section', { style: S.card, 'data-dsh-part': 'kikicode' },
-        h('div', { style: S.header },
-          h('span', { style: S.title }, tr('title')),
-          statusBadges(),
-          h('span', { style: S.grow }),
-          busy === '__load'
-            ? h('span', { style: S.sub }, tr('loading'))
-            : h('button', { type: 'button', style: S.button, disabled: busy !== null, onClick: load }, tr('refresh')),
-        ),
-        h('div', { style: S.hint }, tr('hint')),
-        error ? h('div', { style: S.error }, error) : null,
-        notice ? h('div', { style: S.notice }, notice) : null,
-        renderUsage(),
-        configured && !rekey
-          ? h('div', { style: S.actions },
-              h('button', { type: 'button', style: S.button, disabled: busy !== null, onClick: doRefresh }, busy === '__refresh' ? tr('loading') : tr('action.refreshModels')),
-              h('button', { type: 'button', style: S.button, disabled: busy !== null, onClick: () => setRekey(true) }, tr('action.rekey')),
-              h('button', { type: 'button', style: S.danger, disabled: busy !== null, onClick: doRemove }, tr('action.remove')),
-            )
-          : renderForm(),
-        probe ? renderProbe() : null,
-        (probe || rows)
-          ? h('div', { style: { marginTop: 8 } },
-              h('button', { type: 'button', style: S.linkButton, onClick: () => setShowModels((open) => !open) },
-                showModels ? tr('action.hideModels') : tr('action.showModels')),
-            )
-          : null,
-        renderModels(),
+      const modelsCard = () => {
+        if (!configured && !probe) return null
+        return h('div', { className: 'kk-card' },
+          h('div', { className: 'kk-row kk-rowTop' },
+            h('div', { className: 'kk-h2', style: { margin: 0, flex: 1 } }, tr('group.models')),
+            h('button', { type: 'button', className: 'kk-linkBtn', onClick: () => setShowModels((open) => !open) },
+              showModels ? tr('action.hideModels') : tr('action.showModels')),
+          ),
+          info
+            ? h('div', { className: 'kk-row' }, h('span', { className: 'kk-value' },
+                tr('models.summary', { total: info.modelCount, reasoning: info.reasoningCount, vision: info.visionCount })))
+            : null,
+          renderModels(),
+        )
+      }
+
+      return h('div', { className: 'kk-page', 'data-dsh-part': 'kikicode' },
+        h('h1', { className: 'kk-h1' }, tr('title')),
+        h('p', { className: 'kk-hint' }, tr('hint')),
+        error ? h('div', { className: 'kk-error' }, error) : null,
+        notice ? h('div', { className: 'kk-notice' }, notice) : null,
+        connectionCard(),
+        usageCard(),
+        probe ? probeCard() : null,
+        modelsCard(),
       )
     }
 
@@ -444,8 +524,15 @@ window.__ModuleLoader__.load({
 
     function apply(ctx) {
       ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'dsh-kikicode-provider: dictionaries')
-      ctx.slots.inject('settings.models.footer', () =>
-        ctx.slots.register({ name: 'settings.models.footer', id: 'kikicode', order: 10, locale: NS }, KikicodeCard),
+      ctx.effect(() => injectCss('dsh-kikicode-provider', CSS), 'dsh-kikicode-provider: styles')
+      ctx.slots.inject('settings.section', () =>
+        ctx.slots.register({
+          name: 'settings.section',
+          id: 'kikicode',
+          order: 12,
+          label: () => ctx.locale.bind(NS)('nav'),
+          locale: NS,
+        }, KikicodeSection),
       )
     }
 

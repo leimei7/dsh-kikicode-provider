@@ -92,6 +92,13 @@ window.__ModuleLoader__.load({
       'models.vision': '图片',
       'models.unavailable': '渠道停用',
       'models.none': '站内没有可用模型',
+      'models.search': '搜索模型…',
+      'models.total': '共 {n} 个',
+      'models.filtered': '{n} / {total} 个',
+      'models.noLevels': '无档位',
+      'price.title': '输入 ¥{input} / 百万 token · 输出 ¥{output} / 百万 token{hit}',
+      'price.hit': ' · 缓存命中 ¥{hit}',
+      'price.none': '站内没有这个模型的价格',
       'notice.enabled': '已启用 Kikicode（{models} 个模型），去模型选择器就能看到',
       'notice.refreshed': '已同步模型目录（{models} 个）',
       'notice.removed': '已移除 Kikicode 路由',
@@ -154,6 +161,13 @@ window.__ModuleLoader__.load({
       'models.vision': 'Image',
       'models.unavailable': 'channel off',
       'models.none': 'No usable model on the relay',
+      'models.search': 'Search models…',
+      'models.total': '{n} total',
+      'models.filtered': '{n} of {total}',
+      'models.noLevels': 'no levels',
+      'price.title': 'Input ¥{input} / 1M tokens · output ¥{output} / 1M tokens{hit}',
+      'price.hit': ' · cached ¥{hit}',
+      'price.none': 'no price for this model on the relay',
       'notice.enabled': 'Kikicode enabled ({models} models) — see them in the model picker',
       'notice.refreshed': 'Model catalog synced ({models})',
       'notice.removed': 'Kikicode route removed',
@@ -197,12 +211,22 @@ window.__ModuleLoader__.load({
 .kk-windowLabel{opacity:.65;width:88px;flex:none}
 .kk-windowValue{opacity:.75;width:150px;flex:none;text-align:right}
 .kk-chip{font-size:11px;padding:1px 6px;border-radius:6px;border:1px solid var(--dsw-alias-border-l3,#e2e5ea);opacity:.85;margin-right:4px;display:inline-block}
-.kk-table{margin-top:8px;max-height:280px;overflow:auto;border:1px solid var(--dsw-alias-border-l3,#eef0f3);border-radius:10px}
-.kk-table table{width:100%;border-collapse:collapse}
-.kk-th{position:sticky;top:0;background:var(--dsw-alias-bg-layer-1,transparent);text-align:left;padding:6px 10px;font-size:12px;opacity:.7;border-bottom:1px solid var(--dsw-alias-border-l3,#eef0f3)}
-.kk-td{padding:5px 10px;font-size:12px;border-bottom:1px solid var(--dsw-alias-border-l3,#f5f6f8)}
+.kk-chipLevel{border-color:var(--dsw-alias-brand-primary,#2f6fec);color:var(--dsw-alias-brand-primary,#2f6fec);opacity:1}
+.kk-chipOff{color:var(--dsw-alias-state-error-primary,#c0392b);border-color:currentColor}
+.kk-models{margin-top:10px;display:flex;flex-direction:column;gap:8px}
+.kk-modelsBar{display:flex;align-items:center;gap:10px}
+.kk-search{flex:1;max-width:260px;padding:6px 9px}
+.kk-list{max-height:340px;overflow:auto;border:1px solid var(--dsw-alias-border-l3,#eef0f3);border-radius:10px;padding:2px}
+.kk-item{padding:8px 10px;border-radius:8px}
+.kk-item:hover{background:var(--dsw-alias-bg-layer-1,#f2f4f7)}
+.kk-item + .kk-item{border-top:1px solid var(--dsw-alias-border-l3,#f5f6f8)}
+.kk-itemOff{opacity:.5}
+.kk-itemTop{display:flex;align-items:baseline;gap:10px}
+.kk-itemId{flex:1;min-width:0;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.kk-itemPrice{flex:none;font-size:12px;opacity:.6;white-space:nowrap}
+.kk-itemMeta{display:flex;flex-wrap:wrap;align-items:center;gap:4px;margin-top:4px}
+.kk-empty{opacity:.6;font-size:12px;padding:8px 2px}
 .kk-mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
-.kk-price{white-space:nowrap}
 @media (prefers-reduced-motion:reduce){.kk-barFill{transition:none}}
 `
 
@@ -237,7 +261,7 @@ window.__ModuleLoader__.load({
     }
 
     const money = (value) => `¥${Number(value || 0).toFixed(2)}`
-    const priceText = (price) => (price ? `${price.input} / ${price.output}${price.hit !== null && price.hit !== undefined ? `（命中 ${price.hit}）` : ''}` : '-')
+    const priceText = (price) => (price ? `¥${price.input} / ¥${price.output}` : '')
 
     // --- 页面 -----------------------------------------------------------------
 
@@ -252,6 +276,7 @@ window.__ModuleLoader__.load({
       const [probe, setProbe] = react.useState(null)
       const [rows, setRows] = react.useState(null)
       const [showModels, setShowModels] = react.useState(false)
+      const [modelQuery, setModelQuery] = react.useState('')
       const [rekey, setRekey] = react.useState(false)
 
       const load = react.useCallback(async () => {
@@ -345,6 +370,16 @@ window.__ModuleLoader__.load({
       const info = state ? state.station : null
       const me = state && state.usage && state.usage.ok !== false ? state.usage : null
       const plan = me && me.plan && me.plan.active === true ? me.plan : null
+
+      /** 价格悬浮说明：单位、命中价都用当前语言说清楚。 */
+      const priceTip = (price) =>
+        price
+          ? format(t('price.title'), {
+              input: price.input,
+              output: price.output,
+              hit: price.hit === null || price.hit === undefined ? '' : format(t('price.hit'), { hit: price.hit }),
+            })
+          : t('price.none')
 
       const statusBadge = () => {
         if (!state) return null
@@ -458,35 +493,46 @@ window.__ModuleLoader__.load({
 
       const renderModels = () => {
         if (!showModels) return null
-        if (busy === '__rows') return h('div', { className: 'kk-sub' }, tr('loading'))
-        const list = rows || (probe && probe.models) || []
-        if (list.length === 0) return h('div', { className: 'kk-sub' }, tr('models.none'))
-        return h('div', { className: 'kk-table' },
-          h('table', null,
-            h('thead', null,
-              h('tr', null,
-                h('th', { className: 'kk-th' }, tr('models.id')),
-                h('th', { className: 'kk-th' }, tr('models.vendor')),
-                h('th', { className: 'kk-th' }, tr('models.price')),
-                h('th', { className: 'kk-th' }, tr('models.levels')),
-              ),
-            ),
-            h('tbody', null,
-              list.map((row) =>
-                h('tr', { key: row.id, style: row.available === false ? { opacity: 0.45 } : undefined },
-                  h('td', { className: 'kk-td kk-mono' }, row.id, row.available === false ? ` · ${tr('models.unavailable')}` : ''),
-                  h('td', { className: 'kk-td' }, row.vendor || '-'),
-                  h('td', { className: 'kk-td kk-price' }, priceText(row.price)),
-                  h('td', { className: 'kk-td' },
-                    row.levels && row.levels.length > 0
-                      ? row.levels.map((level) => h('span', { key: level, className: 'kk-chip' }, level))
-                      : h('span', { className: 'kk-sub' }, '-'),
-                    row.vision ? h('span', { className: 'kk-chip' }, tr('models.vision')) : null,
+        if (busy === '__rows') return h('div', { className: 'kk-empty' }, tr('loading'))
+        const all = rows || (probe && probe.models) || []
+        if (all.length === 0) return h('div', { className: 'kk-empty' }, tr('models.none'))
+        // 112 个模型平铺太吵：给一个搜索框，并把每行拆成「模型名 + 价格」和一行标签，
+        // 比四列表格好读（表格里长模型名会和价格/档位挤在一起）。
+        const query = modelQuery.trim().toLowerCase()
+        const list = query === ''
+          ? all
+          : all.filter((row) => `${row.id} ${row.vendor || ''}`.toLowerCase().includes(query))
+        return h('div', { className: 'kk-models' },
+          h('div', { className: 'kk-modelsBar' },
+            h('input', {
+              className: 'kk-input kk-search',
+              value: modelQuery,
+              placeholder: tr('models.search'),
+              onChange: (event) => setModelQuery(event.target.value),
+            }),
+            h('span', { className: 'kk-sub' },
+              query === '' ? tr('models.total', { n: all.length }) : tr('models.filtered', { n: list.length, total: all.length })),
+          ),
+          list.length === 0
+            ? h('div', { className: 'kk-empty' }, tr('models.none'))
+            : h('div', { className: 'kk-list' },
+                list.map((row) =>
+                  h('div', { className: row.available === false ? 'kk-item kk-itemOff' : 'kk-item', key: row.id },
+                    h('div', { className: 'kk-itemTop' },
+                      h('span', { className: 'kk-itemId' }, row.id),
+                      h('span', { className: 'kk-itemPrice', title: priceTip(row.price) }, priceText(row.price)),
+                    ),
+                    h('div', { className: 'kk-itemMeta' },
+                      row.vendor ? h('span', { className: 'kk-chip' }, row.vendor) : null,
+                      row.vision ? h('span', { className: 'kk-chip' }, tr('models.vision')) : null,
+                      row.available === false ? h('span', { className: 'kk-chip kk-chipOff' }, tr('models.unavailable')) : null,
+                      row.levels && row.levels.length > 0
+                        ? row.levels.map((level) => h('span', { className: 'kk-chip kk-chipLevel', key: level }, level))
+                        : h('span', { className: 'kk-sub' }, tr('models.noLevels')),
+                    ),
                   ),
                 ),
               ),
-            ),
-          ),
         )
       }
 

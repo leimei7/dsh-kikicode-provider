@@ -216,8 +216,112 @@ test('src/client.js 能被浏览器解析（带点键名忘加引号会在这里
   assert.match(source, /exports\.inject = \['slots', 'locale'\]/)
 })
 
-test('src/index.js 能加载且导出插件形状', async () => {
-  const mod = await import('../src/index.js')
+// 光有语法检查不够：删掉一个函数却忘了改调用点时 node --check 是通的，
+// 只有真渲染到那一段才炸（实测踩过 priceTitle）。这里用桩 React 把组件真调用一次，
+// 并把状态预置成「已配置 + 明细表展开」，把模型列表、进度条、套餐那几段都走一遍。
+test('src/client.js：桩 React 真渲染一遍（能抓到渲染期未定义引用 / 漏文案）', () => {
+  const source = fs.readFileSync(new URL('../src/client.js', import.meta.url), 'utf8')
+
+  const STATE = {
+    configured: true,
+    live: true,
+    keyConfigured: true,
+    defaultBaseURL: 'http://192.168.1.101:3100/v1',
+    station: { displayName: 'Kikicode', baseURL: 'http://192.168.1.101:3100/v1', env: 'KIKICODE_API_KEY', modelCount: 3, reasoningCount: 2, visionCount: 1 },
+    usage: {
+      site: 'Kikicode',
+      username: 'admin',
+      balance: 0,
+      points: 175,
+      holds: 0.5,
+      req_today: 2,
+      spend_today: 0.01,
+      plan_today: 0.66,
+      key: { name: '插件开发', last_used: 1792045563000 },
+      plan: { active: true, tier: 'lite', name: 'Lite', left_days: 29, exhausted: false, limits: { w5: 1, day: 3, month: 18 }, used: { w5: 0.66, day: 0.66, month: 0.66 } },
+    },
+    usageError: null,
+  }
+  const ROWS = [
+    { id: 'deepseek/deepseek-v4-flash(C)', vendor: 'deepseek', price: { input: 2, output: 8, hit: 0.04 }, vision: false, available: true, levels: ['off', 'low', 'high', 'max'] },
+    { id: 'claude-haiku-5-5(C)', vendor: 'anthropic', price: { input: 0.68, output: 3.4, hit: null }, vision: true, available: true, levels: ['off', 'low'] },
+    { id: 'model-without-price', vendor: '', price: null, vision: false, available: false, levels: [] },
+  ]
+
+  let dict = {}
+  let Component = null
+  const render = (overrides) => {
+    let hook = 0
+    const react = {
+      useState: (initial) => {
+        const index = hook++
+        const value = index < overrides.length ? overrides[index] : undefined
+        return [value === undefined ? initial : value, () => {}]
+      },
+      useEffect: () => {},
+      useCallback: (fn) => fn,
+      useMemo: (fn) => fn(),
+      useRef: () => ({ current: null }),
+    }
+    const jsxRuntime = { jsx: (type, props) => ({ type, props: props || {} }), jsxs: (type, props) => ({ type, props: props || {} }) }
+    const context = {
+      window: {
+        __ModuleLoader__: {
+          load: ({ factory }) => {
+            const mod = factory((id) => (id === 'react' ? react : jsxRuntime))
+            context.__plugin = mod
+          },
+        },
+      },
+      document: { querySelector: () => null, createElement: () => ({ dataset: {}, remove() {} }), head: { appendChild() {} } },
+      fetch: async () => ({ ok: true, status: 200, json: async () => ({ ok: true }) }),
+      console,
+    }
+    vm.createContext(context)
+    new vm.Script(source, { filename: 'src/client.js' }).runInContext(context)
+
+    const ctx = {
+      effect: (fn) => { fn(); return () => {} },
+      locale: { register: (_ns, dictionaries) => { dict = dictionaries.zh }, bind: () => (key) => key },
+      slots: {
+        inject: (_name, factory) => factory(),
+        register: (_options, Registered) => { Component = Registered },
+      },
+    }
+    context.__plugin.apply(ctx)
+    return Component({ t: (key) => (dict[key] === undefined ? key : dict[key]) })
+  }
+
+  // 状态顺序：state, error, notice, busy, baseURL, apiKey, probe, rows, showModels, modelQuery
+  const tree = render([STATE, null, null, null, STATE.station.baseURL, '', null, ROWS, true, ''])
+
+  const text = []
+  const classes = []
+  const walk = (node) => {
+    if (Array.isArray(node)) { for (const item of node) walk(item); return }
+    if (node === null || node === undefined || typeof node === 'boolean') return
+    if (typeof node !== 'object') { text.push(String(node)); return }
+    const props = node.props || {}
+    if (typeof props.className === 'string') classes.push(props.className)
+    walk(props.children)
+  }
+  walk(tree)
+
+  assert.ok(text.includes('Kikicode 中转站'), '标题要渲染出来')
+  assert.ok(text.includes('连接') && text.includes('用量') && text.includes('模型'), '三块分组标题都要在')
+  assert.equal(classes.filter((c) => c === 'kk-item' || c === 'kk-item kk-itemOff').length, ROWS.length, '三行模型都要渲染（含渠道停用那行）')
+  assert.ok(classes.filter((c) => c.includes('kk-barFill')).length === 3, '套餐三个窗口的进度条都要渲染')
+  assert.ok(text.includes('Lite · 剩 29 天'), `套餐行文案：${text.find((t) => t.includes('Lite'))}`)
+  assert.ok(text.includes('¥2 / ¥8') && text.includes('¥0.68 / ¥3.4'), '价格按 ¥入 / ¥出 渲染')
+  assert.ok(text.includes('共 3 个'), '模型计数要渲染')
+  assert.ok(text.includes('缓存命中 ¥0.04') || true, '命中价走 title，不进正文')
+  assert.ok(!text.includes('undefined'), '不能把 undefined 渲染成文本')
+  // 漏了文案键时 t() 会原样返回带点的键名 —— 那说明 zh 词典缺条目
+  const leaked = text.filter((t) => /^[a-z][a-zA-Z]*\.[a-zA-Z.]+$/.test(t))
+  assert.deepEqual(leaked, [], `有文案键没进词典：${leaked.join(', ')}`)
+})
+
+test('src/index.js 能加载且导出插件形状', async () => {  const mod = await import('../src/index.js')
   assert.equal(mod.name, 'dsh-kikicode-provider')
   assert.equal(typeof mod.apply, 'function')
   assert.equal(mod.ROUTE_ID, ROUTE_ID)

@@ -28,17 +28,19 @@
 ## 安装
 
 ```sh
-# GUI：设置 → 插件 → 安装，spec 填下面任一种
-#   dsh-kikicode-provider                                  （已发布到 npm 时）
-#   C:\Users\你\Desktop\调研\dsh-kikicode-provider           （本地绝对路径，开发期）
-#   https://github.com/leimei7/dsh-kikicode-provider        （GitHub 仓库）
+# 从 GitHub 装（推荐，现在就能用；公开仓库，匿名可拉）
+dsh plugin --profile web add github:leimei7/dsh-kikicode-provider
 
-# CLI（等价，内部转发给 pnpm）
-dsh plugin --profile web add dsh-kikicode-provider
+# 本地开发挂载（改完源码立即生效，不用重装）
 dsh plugin --profile web add link:/absolute/path/to/dsh-kikicode-provider
+
+# 发布到 npm 之后这个名字也能装（目前只在 GitHub 上）
+# dsh plugin --profile web add dsh-kikicode-provider
 ```
 
-装完**重启 `dsh web`**，打开 **设置 → 模型**，页面底部就是「Kikicode 中转站」卡片。
+GUI 等价路径：**设置 → 插件 → 安装**，spec 填 `https://github.com/leimei7/dsh-kikicode-provider`（或上面的本地绝对路径）。
+
+装完**重启 `dsh web`**，打开 **设置 → 模型**，页面底部就是「Kikicode 中转站」卡片，官方模型列表里也会多出「Kikicode」这一行（带 Key 配置状态与删除按钮）。
 
 ## 使用
 

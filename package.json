@@ -1,0 +1,58 @@
+{
+  "name": "dsh-kikicode-provider",
+  "version": "0.1.0",
+  "description": "Kikicode（局域网 AI 中转站）供应商插件：装好后只需粘贴 API Key，自动同步模型目录与每个模型的思考档位，写入官方 llm-pi-ai 路由与凭据，无需改配置文件。",
+  "type": "module",
+  "main": "src/index.js",
+  "exports": {
+    ".": "./src/index.js",
+    "./client": "./src/client.js",
+    "./core": "./core/station.js",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "src",
+    "core",
+    "cordis.patch.yml",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "test": "node --test test/station.test.js"
+  },
+  "keywords": [
+    "deepseek-harness",
+    "dsh",
+    "dsh-plugin",
+    "provider",
+    "kikicode",
+    "openai-compatible",
+    "reasoning-effort",
+    "lan-relay"
+  ],
+  "license": "MIT",
+  "author": "leimei7",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/leimei7/dsh-kikicode-provider.git"
+  },
+  "homepage": "https://github.com/leimei7/dsh-kikicode-provider#readme",
+  "bugs": {
+    "url": "https://github.com/leimei7/dsh-kikicode-provider/issues"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "inject": [
+        "@deepseek-ai/dsh-client-locale",
+        "@deepseek-ai/dsh-client-ui-renderer"
+      ]
+    },
+    "engines": {
+      "dsh": ">=0.1.6-alpha.2"
+    }
+  }
+}

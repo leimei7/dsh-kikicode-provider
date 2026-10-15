@@ -1,0 +1,11 @@
+# dsh-kikicode-provider bundle patch：把本插件插进 profile 的名册。
+#
+# node 那半提供只监听回环的 /dsh-kikicode/* 路由；浏览器那半（exports "./client"）
+# 在官方「设置 → 模型」页脚挂一张 Kikicode 卡片。
+#
+# 这里的入口名**故意写裸包名**：client-module 扫描器把它当 package specifier，
+# 会去解析 `<name>/package.json`；写成子路径会被缓存成「不是客户端包」，浏览器那半
+# 就永远不加载 —— 官方页面不报错，只是卡片不出现。
+- insert:
+    - id: dsh-kikicode-provider
+      name: 'dsh-kikicode-provider'

@@ -1,0 +1,6 @@
+node_modules/
+*.log
+.DS_Store
+# 本地开发时用来存测试 Key / 测试产物的目录，绝不入库
+.secret/
+tmp/

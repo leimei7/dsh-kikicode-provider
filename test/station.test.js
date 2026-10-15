@@ -36,6 +36,25 @@ test('normalizeBaseURL：非法输入必须报错，不能猜', () => {
   assert.throws(() => normalizeBaseURL('http://192.168.1.101:3100?a=1'), /不能带查询参数/)
 })
 
+test('normalizeBaseURL：把整个端点粘进来也要救回来（否则拼成 /v1/models/models 全 404）', () => {
+  assert.equal(normalizeBaseURL('http://192.168.1.101:3100/v1/models'), 'http://192.168.1.101:3100/v1')
+  assert.equal(normalizeBaseURL('http://192.168.1.101:3100/v1/chat/completions'), 'http://192.168.1.101:3100/v1')
+  assert.equal(normalizeBaseURL('http://192.168.1.101:3100/v1/chat/completions/'), 'http://192.168.1.101:3100/v1')
+  assert.equal(normalizeBaseURL('http://192.168.1.101:3100/v1/models/'), 'http://192.168.1.101:3100/v1')
+  // 正常的自定义路径前缀不能被误伤
+  assert.equal(normalizeBaseURL('https://relay.example.com/openai/v1'), 'https://relay.example.com/openai/v1')
+  assert.equal(normalizeBaseURL('https://relay.example.com/llm'), 'https://relay.example.com/llm')
+})
+
+test('reasoningEffortsOf：reasoning_options.values 为空数组时退回 efforts', () => {
+  const efforts = reasoningEffortsOf({
+    reasoning_options: { type: 'effort', values: [] },
+    efforts: ['off', 'on'],
+    supported_parameters: ['reasoning_effort'],
+  })
+  assert.deepEqual(efforts, { off: 'off', high: 'on' })
+})
+
 test('levelIdOf：站内档位 → DSH 档位名', () => {
   assert.equal(levelIdOf('off'), 'off')
   assert.equal(levelIdOf('low'), 'low')

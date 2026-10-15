@@ -59,6 +59,9 @@ export function normalizeBaseURL(value) {
   if (url.username || url.password) throw new Error('中转站地址不能带账号密码')
   if (url.search || url.hash) throw new Error('中转站地址不能带查询参数或 #')
   let path = url.pathname.replace(/\/+$/, '')
+  // 用户经常把整个端点粘进来（`.../v1/models`、`.../v1/chat/completions`）。
+  // 留着它，拼出来的请求会变成 `/v1/models/models`，全是 404 —— 这里剥掉端点后缀。
+  path = path.replace(/\/(models|chat\/completions|completions|responses|messages)$/i, '')
   if (path === '' || path === '/') path = '/v1'
   return `${url.protocol}//${url.host}${path}`
 }
@@ -93,7 +96,9 @@ function orderEfforts(dict) {
  */
 export function reasoningEffortsOf(model) {
   const options = model && typeof model === 'object' ? model.reasoning_options : undefined
-  const values = Array.isArray(options?.values)
+  // reasoning_options.values 是空数组时退回 efforts：站内两个字段应当一致，
+  // 但真出现不一致时，宁可相信有内容的那一个，也不要判成「非推理模型」。
+  const values = Array.isArray(options?.values) && options.values.length > 0
     ? options.values
     : Array.isArray(model?.efforts)
       ? model.efforts

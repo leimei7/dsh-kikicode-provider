@@ -191,6 +191,9 @@ test('src/client.js 能被浏览器解析（带点键名忘加引号会在这里
   // 用户看到的就是一条没有颜色的灰轨道（实测踩过）。
   assert.match(source, /\.kk-barFill\{display:block/, '进度条填充要 display:block，否则 width/height 对行内元素无效')
   assert.match(source, /h\('span', \{ className: pct >= 90 \? 'kk-barFill kk-barFillHot' : 'kk-barFill'/)
+  // 展开模型明细必须按需拉目录：否则 rows 为空会直接落到「站内没有可用模型」兜底文案，
+  // 看起来像插件坏了（实测用户就是这么遇到的）。
+  assert.match(source, /if \(next && !rows && !probe\)/, '展开模型明细时要按需拉一次目录')
   assert.match(source, /exports\.inject = \['slots', 'locale'\]/)
 })
 

@@ -327,6 +327,20 @@ window.__ModuleLoader__.load({
         })
       }
 
+      // 展开模型明细时按需拉一次目录（用已存的 Key，不写任何东西）。
+      // 之前只在「检测」「同步模型」之后才有 rows，直接展开就会走到兜底文案
+      // 「站内没有可用模型」—— 看起来像坏了，其实是没拉。
+      const toggleModels = () => {
+        const next = !showModels
+        setShowModels(next)
+        if (next && !rows && !probe) {
+          void run('__rows', async () => {
+            const result = await call('/preview', { method: 'POST', body: JSON.stringify({ baseURL }) })
+            setRows(result.models || [])
+          })
+        }
+      }
+
       const configured = state ? state.configured === true : false
       const info = state ? state.station : null
       const me = state && state.usage && state.usage.ok !== false ? state.usage : null
@@ -444,6 +458,7 @@ window.__ModuleLoader__.load({
 
       const renderModels = () => {
         if (!showModels) return null
+        if (busy === '__rows') return h('div', { className: 'kk-sub' }, tr('loading'))
         const list = rows || (probe && probe.models) || []
         if (list.length === 0) return h('div', { className: 'kk-sub' }, tr('models.none'))
         return h('div', { className: 'kk-table' },
@@ -497,8 +512,8 @@ window.__ModuleLoader__.load({
         return h('div', { className: 'kk-card' },
           h('div', { className: 'kk-row kk-rowTop' },
             h('div', { className: 'kk-h2', style: { margin: 0, flex: 1 } }, tr('group.models')),
-            h('button', { type: 'button', className: 'kk-linkBtn', onClick: () => setShowModels((open) => !open) },
-              showModels ? tr('action.hideModels') : tr('action.showModels')),
+            h('button', { type: 'button', className: 'kk-linkBtn', disabled: busy !== null, onClick: toggleModels },
+              busy === '__rows' ? tr('loading') : showModels ? tr('action.hideModels') : tr('action.showModels')),
           ),
           info
             ? h('div', { className: 'kk-row' }, h('span', { className: 'kk-value' },

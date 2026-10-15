@@ -97,6 +97,7 @@ window.__ModuleLoader__.load({
       'models.filtered': '{n} / {total} 个',
       'models.noLevels': '无档位',
       'models.windowTitle': '上下文窗口 {n} tokens（中转站从上游元数据导入）',
+      'models.maxOutTitle': '输出上限 {n} tokens（中转站按价格收敛后的策略值）',
       'price.title': '输入 ¥{input} / 百万 token · 输出 ¥{output} / 百万 token{hit}',
       'price.hit': ' · 缓存命中 ¥{hit}',
       'price.none': '站内没有这个模型的价格',
@@ -167,6 +168,7 @@ window.__ModuleLoader__.load({
       'models.filtered': '{n} of {total}',
       'models.noLevels': 'no levels',
       'models.windowTitle': 'Context window {n} tokens (imported from the relay’s upstream metadata)',
+      'models.maxOutTitle': 'Output cap {n} tokens (the relay’s price-aware policy value)',
       'price.title': 'Input ¥{input} / 1M tokens · output ¥{output} / 1M tokens{hit}',
       'price.hit': ' · cached ¥{hit}',
       'price.none': 'no price for this model on the relay',
@@ -533,6 +535,7 @@ window.__ModuleLoader__.load({
                     h('div', { className: 'kk-itemMeta' },
                       row.vendor ? h('span', { className: 'kk-chip' }, row.vendor) : null,
                       row.context ? h('span', { className: 'kk-chip', title: tr('models.windowTitle', { n: row.context }) }, windowLabel(row.context)) : null,
+                      row.maxOut ? h('span', { className: 'kk-chip', title: tr('models.maxOutTitle', { n: row.maxOut }) }, `出 ${windowLabel(row.maxOut)}`) : null,
                       row.vision ? h('span', { className: 'kk-chip' }, tr('models.vision')) : null,
                       row.available === false ? h('span', { className: 'kk-chip kk-chipOff' }, tr('models.unavailable')) : null,
                       row.levels && row.levels.length > 0

@@ -258,7 +258,7 @@ test('src/client.js：桩 React 真渲染一遍（能抓到渲染期未定义引
     usageError: null,
   }
   const ROWS = [
-    { id: 'deepseek/deepseek-v4-flash(C)', vendor: 'deepseek', price: { input: 2, output: 8, hit: 0.04 }, vision: false, available: true, levels: ['off', 'low', 'high', 'max'] },
+    { id: 'deepseek/deepseek-v4-flash(C)', vendor: 'deepseek', price: { input: 2, output: 8, hit: 0.04 }, vision: false, available: true, levels: ['off', 'low', 'high', 'max'], context: 1000000, maxOut: 62500 },
     { id: 'claude-haiku-5-5(C)', vendor: 'anthropic', price: { input: 0.68, output: 3.4, hit: null }, vision: true, available: true, levels: ['off', 'low'] },
     { id: 'model-without-price', vendor: '', price: null, vision: false, available: false, levels: [] },
   ]
@@ -329,6 +329,7 @@ test('src/client.js：桩 React 真渲染一遍（能抓到渲染期未定义引
   assert.ok(text.includes('Lite · 剩 29 天'), `套餐行文案：${text.find((t) => t.includes('Lite'))}`)
   assert.ok(text.includes('¥2 / ¥8') && text.includes('¥0.68 / ¥3.4'), '价格按 ¥入 / ¥出 渲染')
   assert.ok(text.includes('共 3 个'), '模型计数要渲染')
+  assert.ok(text.includes('1M') && text.includes('出 63K'), '窗口与输出上限标签要渲染（1M / 出 63K，62500 四舍五入到 63K）')
   assert.ok(text.includes('缓存命中 ¥0.04') || true, '命中价走 title，不进正文')
   assert.ok(!text.includes('undefined'), '不能把 undefined 渲染成文本')
   // 漏了文案键时 t() 会原样返回带点的键名 —— 那说明 zh 词典缺条目

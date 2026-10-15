@@ -3,6 +3,8 @@
 //   node --test test/station.test.js
 import test from 'node:test'
 import assert from 'node:assert/strict'
+import vm from 'node:vm'
+import fs from 'node:fs'
 
 import {
   DEFAULT_BASE_URL,
@@ -171,4 +173,25 @@ test('describeProfile：读回已配置的 profile', () => {
 test('插件身份常量稳定（改了这个，老用户已写入的路由就成孤儿）', () => {
   assert.equal(ROUTE_ID, 'kikicode')
   assert.equal(ENV_REF, 'KIKICODE_API_KEY')
+})
+
+// 浏览器那半只有在真正加载时才会暴露语法错误：宿主半照常工作，界面只显示
+// 「Failed to load plugins … import failed」。所以这里用 vm 编译一遍 —— 实测抓到过
+// 一个：对象字面量里的 action.probe / status.live 这种带点键名忘了加引号。
+test('src/client.js 能被浏览器解析（带点键名忘加引号会在这里炸）', () => {
+  const source = fs.readFileSync(new URL('../src/client.js', import.meta.url), 'utf8')
+  assert.doesNotThrow(() => new vm.Script(source, { filename: 'src/client.js' }))
+  // 注册协议与挂载点：id 必须等于包名，slot 必须挂在官方模型页页脚
+  assert.match(source, /__ModuleLoader__\.load\(\{/)
+  assert.match(source, /id: 'dsh-kikicode-provider'/)
+  assert.match(source, /settings\.models\.footer/)
+  assert.match(source, /exports\.inject = \['slots', 'locale'\]/)
+})
+
+test('src/index.js 能加载且导出插件形状', async () => {
+  const mod = await import('../src/index.js')
+  assert.equal(mod.name, 'dsh-kikicode-provider')
+  assert.equal(typeof mod.apply, 'function')
+  assert.equal(mod.ROUTE_ID, ROUTE_ID)
+  assert.equal(mod.ENV_REF, ENV_REF)
 })
